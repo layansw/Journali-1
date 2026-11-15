@@ -1,14 +1,7 @@
-
 import SwiftUI
 
 struct ContentView: View {
     @StateObject private var viewModel = JournalViewModel()
-
-    @State private var showEditor = false
-    @State private var editingJournal: Journal?
-
-    @State private var journalToDelete: Journal?
-    @State private var showDeleteAlert = false
 
     var body: some View {
         NavigationStack {
@@ -16,9 +9,7 @@ struct ContentView: View {
                 if viewModel.journals.isEmpty {
                     emptyState
                 } else if viewModel.filteredJournals.isEmpty {
-                    ContentUnavailableView.search(
-                        text: viewModel.searchText
-                    )
+                    ContentUnavailableView.search(text: viewModel.searchText)
                 } else {
                     journalList
                 }
@@ -31,12 +22,10 @@ struct ContentView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
-
                     Menu {
                         Button("Sort by Bookmark") {
                             viewModel.sortByBookmark = true
                         }
-
                         Button("Sort by Entry Date") {
                             viewModel.sortByBookmark = false
                         }
@@ -45,8 +34,7 @@ struct ContentView: View {
                     }
 
                     Button {
-                        editingJournal = nil
-                        showEditor = true
+                        viewModel.startAdding()
                     } label: {
                         Image(systemName: "plus")
                     }
@@ -55,44 +43,18 @@ struct ContentView: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbarBackground(Color.black, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
-
-            // Add / Edit Journal
-
-            .sheet(isPresented: $showEditor) {
-                AddJournalView(journal: editingJournal) { title, content in
-
-                    if let journal = editingJournal {
-                        viewModel.updateJournal(
-                            journal,
-                            title: title,
-                            content: content
-                        )
-                    } else {
-                        viewModel.addJournal(
-                            title: title,
-                            content: content
-                        )
-                    }
+            .sheet(isPresented: $viewModel.showEditor) {
+                AddJournalView(journal: viewModel.editingJournal) { title, content in
+                    viewModel.saveJournal(title: title, content: content)
                 }
                 .presentationBackground(Color.black)
             }
-
-            // Delete Confirmation
-
-            .alert(
-                "Delete Journal?",
-                isPresented: $showDeleteAlert
-            ) {
+            .alert("Delete Journal?", isPresented: $viewModel.showDeleteAlert) {
                 Button("Cancel", role: .cancel) {
-                    journalToDelete = nil
+                    viewModel.cancelDelete()
                 }
-
                 Button("Delete", role: .destructive) {
-                    if let journal = journalToDelete {
-                        viewModel.deleteJournal(journal)
-                    }
-
-                    journalToDelete = nil
+                    viewModel.confirmDelete()
                 }
             } message: {
                 Text("Are you sure you want to delete this Journal?")
@@ -114,11 +76,11 @@ struct ContentView: View {
 
             Text("Begin Your Journal")
                 .font(.title2.bold())
-                .foregroundColor(Color("Primary"))
+                .foregroundStyle(Color("Primary"))
 
             Text("Craft your personal diary, tap the\nplus icon to begin.")
                 .font(.body)
-                .foregroundColor(Color("secondary"))
+                .foregroundStyle(Color("secondary"))
                 .multilineTextAlignment(.center)
 
             Spacer()
@@ -131,77 +93,19 @@ struct ContentView: View {
     private var journalList: some View {
         List {
             ForEach(viewModel.filteredJournals) { journal in
-
-                VStack(alignment: .leading, spacing: 8) {
-
-                    HStack {
-                        Text(journal.title)
-                            .font(.headline)
-                            .foregroundColor(Color("text"))
-
-                        Spacer()
-
-                        Button {
-                            viewModel.toggleBookmark(journal)
+                journalCard(journal)
+                    .listRowBackground(Color.black)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(
+                        EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16)
+                    )
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) {
+                            viewModel.requestDelete(journal)
                         } label: {
-                            Image(
-                                systemName: journal.isBookmarked
-                                ? "bookmark.fill"
-                                : "bookmark"
-                            )
-                            .font(.system(size: 17))
-                            .foregroundColor(Color("Primary"))
+                            Label("Delete", systemImage: "trash")
                         }
-                        .buttonStyle(.borderless)
                     }
-
-                    Text(journal.date, style: .date)
-                        .font(.caption2)
-                        .foregroundColor(Color("secondary"))
-
-                    Text(journal.content)
-                        .font(.body)
-                        .foregroundColor(.white)
-                        .lineLimit(4)
-                }
-                .padding()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    Color(
-                        red: 0.11,
-                        green: 0.11,
-                        blue: 0.12
-                    )
-                )
-                .clipShape(
-                    RoundedRectangle(cornerRadius: 16)
-                )
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    editingJournal = journal
-                    showEditor = true
-                }
-                .listRowBackground(Color.black)
-                .listRowSeparator(.hidden)
-                .listRowInsets(
-                    EdgeInsets(
-                        top: 6,
-                        leading: 16,
-                        bottom: 6,
-                        trailing: 16
-                    )
-                )
-                .swipeActions(
-                    edge: .trailing,
-                    allowsFullSwipe: false
-                ) {
-                    Button(role: .destructive) {
-                        journalToDelete = journal
-                        showDeleteAlert = true
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                }
             }
         }
         .listStyle(.plain)
@@ -209,33 +113,69 @@ struct ContentView: View {
         .background(Color.black)
     }
 
+    private func journalCard(_ journal: Journal) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .top) {
+                Text(journal.title)
+                    .font(.title2.bold())
+                    .foregroundStyle(Color(red: 175/255, green: 153/255, blue: 253/255)) // #AF99FD
+
+                Spacer()
+
+                Button {
+                    viewModel.toggleBookmark(journal)
+                } label: {
+                    Image(systemName: journal.isBookmarked ? "bookmark.fill" : "bookmark")
+                        .font(.system(size: 24))
+                        .foregroundStyle(Color(red: 127/255, green: 129/255, blue: 255/255)) // #7F81FF
+                }
+                .buttonStyle(.borderless)
+            }
+
+            Text(formattedDate(journal.date))
+                .font(.subheadline)
+                .foregroundStyle(Color("secondary"))
+
+            Text(journal.content)
+                .font(.body)
+                .foregroundStyle(.white)
+                .lineLimit(5)
+                .padding(.top, 16)
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(red: 0.11, green: 0.11, blue: 0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            viewModel.startEditing(journal)
+        }
+    }
+
+    private func formattedDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US")
+        formatter.dateFormat = "dd/MM/yyyy"
+        return formatter.string(from: date)
+    }
+
     // MARK: - Search Bar
 
     private var searchBar: some View {
         HStack(spacing: 12) {
-
             Image(systemName: "magnifyingglass")
-                .foregroundColor(Color("secondary"))
+                .foregroundStyle(Color("secondary"))
 
-            TextField(
-                "Search",
-                text: $viewModel.searchText
-            )
-            .foregroundColor(.white)
-            .tint(Color("Primary"))
-            .textFieldStyle(.plain)
+            TextField("Search", text: $viewModel.searchText)
+                .foregroundStyle(.white)
+                .tint(Color("Primary"))
+                .textFieldStyle(.plain)
 
             Image(systemName: "mic")
-                .foregroundColor(Color("secondary"))
+                .foregroundStyle(Color("secondary"))
         }
         .padding()
-        .background(
-            Color(
-                red: 0.11,
-                green: 0.11,
-                blue: 0.12
-            )
-        )
+        .background(Color(red: 0.11, green: 0.11, blue: 0.12))
         .clipShape(Capsule())
         .padding()
         .background(Color.black)
@@ -245,4 +185,3 @@ struct ContentView: View {
 #Preview {
     ContentView()
 }
-

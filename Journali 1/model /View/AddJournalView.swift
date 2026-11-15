@@ -1,76 +1,63 @@
-
 import SwiftUI
 
 struct AddJournalView: View {
     @Environment(\.dismiss) private var dismiss
+    @StateObject private var viewModel: AddJournalViewModel
 
-    var journal: Journal?
     var onSave: (String, String) -> Void
 
-    @State private var title: String
-    @State private var content: String
-    @State private var showDiscardAlert = false
+    private let accentColor = Color(red: 127/255, green: 129/255, blue: 255/255) // #7F81FF
+    private let placeholderColor = Color(white: 0.35) // رمادي خفيف
 
     init(
         journal: Journal? = nil,
         onSave: @escaping (String, String) -> Void
     ) {
-        self.journal = journal
         self.onSave = onSave
-
-        _title = State(initialValue: journal?.title ?? "")
-        _content = State(initialValue: journal?.content ?? "")
+        _viewModel = StateObject(
+            wrappedValue: AddJournalViewModel(journal: journal)
+        )
     }
 
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 16) {
 
-                // Title
-
-                TextField("Title", text: $title)
-                    .font(.title2.bold())
-                    .foregroundColor(Color("text"))
-                    .tint(Color("text"))
-                    .textFieldStyle(.plain)
+                // Title (placeholder رمادي خفيف، النص أبيض)
+                TextField(
+                    "",
+                    text: $viewModel.title,
+                    prompt: Text("Title").foregroundColor(placeholderColor)
+                )
+                .font(.title2.bold())
+                .foregroundStyle(.white)
+                .tint(accentColor)
+                .textFieldStyle(.plain)
 
                 // Date
-
-                Text(
-                    journal?.date ?? Date(),
-                    style: .date
-                )
-                .font(.caption)
-                .foregroundColor(Color("secondary"))
-                .padding(.top, 4)
+                Text(viewModel.displayDate, style: .date)
+                    .font(.caption)
+                    .foregroundStyle(Color("secondary"))
+                    .padding(.top, 4)
 
                 // Divider
-
                 Rectangle()
-                    .fill(
-                        Color(
-                            red: 0.30,
-                            green: 0.30,
-                            blue: 0.32
-                        )
-                    )
+                    .fill(Color(red: 0.30, green: 0.30, blue: 0.32))
                     .frame(height: 1)
 
                 // Journal Content
-
                 ZStack(alignment: .topLeading) {
-
-                    TextEditor(text: $content)
+                    TextEditor(text: $viewModel.content)
                         .font(.body)
-                        .foregroundColor(.white)
-                        .tint(Color("Primary"))
+                        .foregroundStyle(.white)
+                        .tint(accentColor)
                         .scrollContentBackground(.hidden)
                         .background(Color.black)
 
-                    if content.isEmpty {
+                    if viewModel.content.isEmpty {
                         Text("Type your journal...")
                             .font(.body)
-                            .foregroundColor(Color("secondary"))
+                            .foregroundStyle(placeholderColor)
                             .padding(.top, 8)
                             .padding(.leading, 5)
                             .allowsHitTesting(false)
@@ -79,65 +66,53 @@ struct AddJournalView: View {
                 .frame(maxHeight: .infinity)
             }
             .padding(20)
-            .frame(
-                maxWidth: .infinity,
-                maxHeight: .infinity
-            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.black.ignoresSafeArea())
-
-            .navigationTitle(
-                journal == nil ? "New Journal" : "Edit Journal"
-            )
+            .navigationTitle(viewModel.navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
-
             .toolbar {
 
-                // Cancel Button
-
-                ToolbarItem(placement: .cancellationAction) {
+                // Cancel (دائرة غامقة + X أبيض)
+                ToolbarItem(placement: .topBarLeading) {
                     Button {
-                        showDiscardAlert = true
+                        if viewModel.hasChanges {
+                            viewModel.showDiscardAlert = true
+                        } else {
+                            dismiss()
+                        }
                     } label: {
                         Image(systemName: "xmark")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .background(Color(red: 0.11, green: 0.11, blue: 0.12))
+                            .clipShape(Circle())
                     }
                 }
 
-                // Save Checkmark Button
-
-                ToolbarItem(placement: .confirmationAction) {
+                // Save (دائرة بنفسجية + checkmark غامق)
+                ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        onSave(title, content)
+                        guard viewModel.canSave else { return }
+                        onSave(viewModel.title, viewModel.content)
                         dismiss()
                     } label: {
                         Image(systemName: "checkmark")
-                            .font(
-                                .system(
-                                    size: 17,
-                                    weight: .semibold
-                                )
-                            )
-                            .foregroundColor(Color("Primary"))
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(.black)
+                            .frame(width: 44, height: 44)
+                            .background(accentColor)
+                            .clipShape(Circle())
+                            .opacity(viewModel.canSave ? 1 : 0.4)
                     }
-                    .disabled(
-                        title.trimmingCharacters(
-                            in: .whitespacesAndNewlines
-                        ).isEmpty
-                    )
+                    .disabled(!viewModel.canSave)
                 }
             }
-
-            .tint(Color("Primary"))
-
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbarBackground(Color.black, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
-
-            .alert(
-                "Discard Changes?",
-                isPresented: $showDiscardAlert
-            ) {
+            .alert("Discard Changes?", isPresented: $viewModel.showDiscardAlert) {
                 Button("Keep Editing", role: .cancel) { }
-
                 Button("Discard Changes", role: .destructive) {
                     dismiss()
                 }
@@ -152,4 +127,3 @@ struct AddJournalView: View {
 #Preview {
     AddJournalView { _, _ in }
 }
-

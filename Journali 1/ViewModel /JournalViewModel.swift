@@ -1,15 +1,21 @@
-
 import SwiftUI
 import Combine
 
-class JournalViewModel: ObservableObject {
+final class JournalViewModel: ObservableObject {
 
+    // MARK: - Data
     @Published var journals: [Journal] = []
     @Published var searchText = ""
     @Published var sortByBookmark = false
 
-    var filteredJournals: [Journal] {
+    // MARK: - UI State
+    @Published var showEditor = false
+    @Published var editingJournal: Journal?
+    @Published var journalToDelete: Journal?
+    @Published var showDeleteAlert = false
 
+    // MARK: - Derived
+    var filteredJournals: [Journal] {
         var result = journals
 
         if !searchText.isEmpty {
@@ -20,32 +26,61 @@ class JournalViewModel: ObservableObject {
         }
 
         if sortByBookmark {
-            return result.sorted {
+            result.sort {
                 if $0.isBookmarked != $1.isBookmarked {
                     return $0.isBookmarked
                 }
                 return $0.date > $1.date
             }
+        } else {
+            result.sort { $0.date > $1.date }
         }
-
-        return result.sorted { $0.date > $1.date }
+        return result
     }
 
-    func addJournal(title: String, content: String) {
-        let journal = Journal(
-            title: title,
-            content: content,
-            date: Date()
-        )
+    // MARK: - Editor Actions
+    func startAdding() {
+        editingJournal = nil
+        showEditor = true
+    }
 
-        journals.append(journal)
+    func startEditing(_ journal: Journal) {
+        editingJournal = journal
+        showEditor = true
+    }
+
+    func saveJournal(title: String, content: String) {
+        if let journal = editingJournal {
+            updateJournal(journal, title: title, content: content)
+        } else {
+            addJournal(title: title, content: content)
+        }
+    }
+
+    // MARK: - Delete Actions
+    func requestDelete(_ journal: Journal) {
+        journalToDelete = journal
+        showDeleteAlert = true
+    }
+
+    func confirmDelete() {
+        if let journal = journalToDelete {
+            deleteJournal(journal)
+        }
+        journalToDelete = nil
+    }
+
+    func cancelDelete() {
+        journalToDelete = nil
+    }
+
+    // MARK: - CRUD
+    func addJournal(title: String, content: String) {
+        journals.append(Journal(title: title, content: content))
     }
 
     func updateJournal(_ journal: Journal, title: String, content: String) {
-        guard let index = journals.firstIndex(where: { $0.id == journal.id }) else {
-            return
-        }
-
+        guard let index = journals.firstIndex(where: { $0.id == journal.id }) else { return }
         journals[index].title = title
         journals[index].content = content
     }
@@ -55,11 +90,7 @@ class JournalViewModel: ObservableObject {
     }
 
     func toggleBookmark(_ journal: Journal) {
-        guard let index = journals.firstIndex(where: { $0.id == journal.id }) else {
-            return
-        }
-
+        guard let index = journals.firstIndex(where: { $0.id == journal.id }) else { return }
         journals[index].isBookmarked.toggle()
     }
 }
-
